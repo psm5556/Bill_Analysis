@@ -1,18 +1,20 @@
 'use client';
 import { useState, useEffect } from 'react';
 
+// Actual field names from TreasuryDirect TA_WS API
 interface TreasuryAuction {
   auctionDate: string;
-  securityType: string;
-  securityTerm: string;
-  highYield: string;
+  securityType: string;       // "Note", "Bond", "Bill"
+  securityTerm: string;       // "10-Year", "30-Year", "26-Week"
+  highYield: string;          // winning yield
   bidToCoverRatio: string;
-  percentAllocatedToDealers: string;
-  percentAllocatedToIndirectBidders: string;
-  percentAllocatedToDirectBidders: string;
-  offeringAmount: string;
+  offeringAmount: string;     // in dollars
   totalAccepted: string;
-  // tail is not directly provided — computed from highYield vs when-issued
+  primaryDealerAccepted: string;
+  directBidderAccepted: string;
+  indirectBidderAccepted: string;
+  reopening: string;          // "Yes" / "No"
+  interestRate: string;
 }
 
 type ProcessedAuction = {
@@ -32,8 +34,14 @@ const GRADE_COLORS: Record<string, string> = {
   B: 'bg-blue-900 text-blue-300',
   C: 'bg-yellow-900 text-yellow-300',
   D: 'bg-red-900 text-red-300',
-  F: 'bg-red-950 text-red-200',
 };
+
+function pct(accepted: string, total: string): number | null {
+  const a = parseFloat(accepted);
+  const t = parseFloat(total);
+  if (!a || !t) return null;
+  return (a / t) * 100;
+}
 
 function calcGrade(btc: number | null, indirect: number | null, dealer: number | null): string {
   if (!btc) return '?';
@@ -41,17 +49,8 @@ function calcGrade(btc: number | null, indirect: number | null, dealer: number |
   if (btc >= 2.5) score += 3;
   else if (btc >= 2.2) score += 2;
   else if (btc >= 2.0) score += 1;
-
-  if (indirect !== null) {
-    if (indirect >= 70) score += 2;
-    else if (indirect >= 60) score += 1;
-  }
-
-  if (dealer !== null) {
-    if (dealer < 15) score += 2;
-    else if (dealer < 25) score += 1;
-  }
-
+  if (indirect !== null) score += indirect >= 70 ? 2 : indirect >= 60 ? 1 : 0;
+  if (dealer !== null) score += dealer < 15 ? 2 : dealer < 25 ? 1 : 0;
   if (score >= 6) return 'A';
   if (score >= 4) return 'B';
   if (score >= 2) return 'C';
@@ -60,21 +59,22 @@ function calcGrade(btc: number | null, indirect: number | null, dealer: number |
 
 function processAuctions(raw: TreasuryAuction[]): ProcessedAuction[] {
   return raw
-    .filter((a) => ['Note', 'Bond', 'Bill'].includes(a.securityType))
-    .slice(0, 20)
+    .filter((a) => a.highYield && parseFloat(a.highYield) > 0)
     .map((a) => {
+      const total = a.totalAccepted;
       const btc = parseFloat(a.bidToCoverRatio) || null;
-      const dealer = parseFloat(a.percentAllocatedToDealers) || null;
-      const indirect = parseFloat(a.percentAllocatedToIndirectBidders) || null;
-      const direct = parseFloat(a.percentAllocatedToDirectBidders) || null;
+      const dealer = pct(a.primaryDealerAccepted, total);
+      const indirect = pct(a.indirectBidderAccepted, total);
+      const direct = pct(a.directBidderAccepted, total);
       const sizeNum = parseFloat(a.offeringAmount);
-      const sizeStr = sizeNum >= 1e9 ? `$${(sizeNum / 1e9).toFixed(0)}B` : `$${sizeNum}`;
+      const sizeStr = sizeNum >= 1e9 ? `$${(sizeNum / 1e9).toFixed(0)}B` : `$${(sizeNum / 1e6).toFixed(0)}M`;
+      const label = `${a.securityTerm} ${a.securityType}${a.reopening === 'Yes' ? ' (재발행)' : ''}`;
 
       return {
         date: a.auctionDate?.slice(0, 10) ?? '-',
-        type: `${a.securityTerm} ${a.securityType}`,
+        type: label,
         size: sizeStr,
-        yield: a.highYield ? `${parseFloat(a.highYield).toFixed(3)}%` : '-',
+        yield: parseFloat(a.highYield) ? `${parseFloat(a.highYield).toFixed(3)}%` : '-',
         btc,
         dealer,
         indirect,
@@ -93,15 +93,19 @@ export default function WeeklyAuction() {
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setError(null);
       try {
-        const res = await fetch('/api/treasury?endpoint=auctions&days=60&type=Bill,Note,Bond');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const res = await fetch('/api/treasury?endpoint=auctions&days=60');
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
         const data: TreasuryAuction[] = await res.json();
-        if (!Array.isArray(data)) throw new Error('Invalid response format');
+        if (!Array.isArray(data)) throw new Error('Invalid response');
         setAuctions(processAuctions(data));
         setLastUpdated(new Date().toLocaleString('ko-KR'));
       } catch (e) {
-        setError(String(e));
+        setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
@@ -115,23 +119,23 @@ export default function WeeklyAuction() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white">📊 주간 경매 현황</h2>
           <div className="text-xs text-slate-500">
-            {loading ? '로딩 중...' : error ? '⚠️ 데이터 오류' : `🟢 실시간 | ${lastUpdated}`}
+            {loading ? '🔄 로딩 중...' : error ? '⚠️ 오류' : `🟢 실시간 | ${lastUpdated}`}
           </div>
         </div>
 
         <p className="text-slate-400 text-sm mb-4">
-          출처: TreasuryDirect.gov 실시간 경매 결과 (최근 60일)
+          출처: <span className="text-blue-400">TreasuryDirect.gov</span> 실시간 경매 결과 (최근 60일 · Notes/Bonds/Bills)
         </p>
 
         {error && (
           <div className="bg-red-950/50 border border-red-800 rounded p-3 mb-4 text-sm text-red-300">
-            TreasuryDirect API 오류: {error}
+            ⚠️ 데이터 로딩 오류: {error}
           </div>
         )}
 
         {loading ? (
           <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
+            {[...Array(6)].map((_, i) => (
               <div key={i} className="h-10 bg-slate-700 rounded animate-pulse" />
             ))}
           </div>
@@ -207,7 +211,8 @@ export default function WeeklyAuction() {
         </div>
 
         <p className="text-slate-600 text-xs mt-3">
-          * 등급 산정: BtC + 간접낙찰자% + 딜러보유% 종합. 꼬리(Tail) 데이터는 TreasuryDirect API에서 직접 제공하지 않음.
+          * 딜러/간접/직접 % = 각 그룹 낙찰액 / 총 낙찰액으로 계산.
+          꼬리(Tail)는 TreasuryDirect API에서 제공하지 않아 생략.
         </p>
       </div>
 
@@ -216,9 +221,9 @@ export default function WeeklyAuction() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           {[
             { label: 'Bid-to-Cover', danger: '2.0x 미만', meaning: '수요 침식 신호' },
-            { label: '꼬리(Tail)', danger: '3bp+', meaning: '심각한 압박 (별도 모니터링 필요)' },
             { label: '딜러 보유', danger: '25%+', meaning: '강제 매수 (부정)' },
             { label: '간접 낙찰자', danger: '60% 미만', meaning: '해외 수요 약화' },
+            { label: '꼬리(Tail)', danger: '3bp+', meaning: '심각한 압박 (bloomberg 확인 필요)' },
           ].map((t, i) => (
             <div key={i} className="bg-slate-900 rounded p-3">
               <div className="text-slate-300 font-medium">{t.label}</div>
