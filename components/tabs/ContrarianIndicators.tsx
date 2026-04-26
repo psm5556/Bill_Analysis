@@ -10,12 +10,23 @@ interface ContrarianIndicatorsProps {
   apiKey: string;
 }
 
+interface JapanMofRow {
+  period: string;
+  bonds: number;
+  usd: number;
+}
+
 export default function ContrarianIndicators({ apiKey }: ContrarianIndicatorsProps) {
   const { fetchSeries, loading } = useFredApi(apiKey);
   const [vixData, setVixData] = useState<ChartDataPoint[]>([]);
   const [sofrData, setSofrData] = useState<ChartDataPoint[]>([]);
   const [hyData, setHyData] = useState<ChartDataPoint[]>([]);
   const [eurusdData, setEurusdData] = useState<ChartDataPoint[]>([]);
+  const [somaTbillsData, setSomaTbillsData] = useState<ChartDataPoint[]>([]);
+  const [somaTotalData, setSomaTotalData] = useState<ChartDataPoint[]>([]);
+  const [japanData, setJapanData] = useState<JapanMofRow[]>([]);
+  const [japanLoading, setJapanLoading] = useState(false);
+  const [japanError, setJapanError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -23,8 +34,20 @@ export default function ContrarianIndicators({ apiKey }: ContrarianIndicatorsPro
     fetchSeries(FRED_SERIES.SOFR, 52).then((d) => d && setSofrData(toChartData(d.observations)));
     fetchSeries(FRED_SERIES.HY_OAS, 52).then((d) => d && setHyData(toChartData(d.observations)));
     fetchSeries(FRED_SERIES.EURUSD, 52).then((d) => d && setEurusdData(toChartData(d.observations)));
+    fetchSeries(FRED_SERIES.SOMA_TBILLS, 12).then((d) => d && setSomaTbillsData(toChartData(d.observations)));
+    fetchSeries(FRED_SERIES.SOMA_TOTAL, 12).then((d) => d && setSomaTotalData(toChartData(d.observations)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
+
+  useEffect(() => {
+    setJapanLoading(true);
+    setJapanError(null);
+    fetch('/api/japan-mof')
+      .then((r) => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+      .then((data: JapanMofRow[]) => setJapanData(Array.isArray(data) ? data : []))
+      .catch((e) => setJapanError(String(e)))
+      .finally(() => setJapanLoading(false));
+  }, []);
 
   const latestVix = vixData.at(-1)?.value ?? null;
   const latestSofr = sofrData.at(-1)?.value ?? null;
@@ -34,8 +57,16 @@ export default function ContrarianIndicators({ apiKey }: ContrarianIndicatorsPro
   const vixSignal = latestVix === null ? 'unknown' : latestVix >= 30 ? 'danger' : latestVix >= 20 ? 'warning' : 'safe';
   const hySignal = latestHy === null ? 'unknown' : latestHy >= 600 ? 'danger' : latestHy >= 400 ? 'warning' : 'safe';
 
+  // SOMA T-Bill ratio calculation
+  const somaRows = somaTbillsData.map((tb, i) => {
+    const total = somaTotalData[i]?.value ?? null;
+    const pct = total && tb.value ? (tb.value / total) * 100 : null;
+    return { date: tb.date, tbills: tb.value, total, pct };
+  });
+
   return (
     <div className="space-y-6">
+      {/* Market Narrative vs Flow */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h2 className="text-lg font-bold text-white mb-2">🔄 역발상 지표 — 내러티브 vs 자금흐름</h2>
         <div className="bg-yellow-950/50 border border-yellow-800 rounded p-4 mb-5 text-sm">
@@ -135,6 +166,7 @@ export default function ContrarianIndicators({ apiKey }: ContrarianIndicatorsPro
         </div>
       </div>
 
+      {/* MOVE Index Reference */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h3 className="text-white font-bold mb-4">📊 MOVE 지수 기준 (채권 VIX)</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
@@ -151,6 +183,216 @@ export default function ContrarianIndicators({ apiKey }: ContrarianIndicatorsPro
           ))}
         </div>
         <p className="text-slate-500 text-xs mt-3">* MOVE 지수 직접 API 없음. ICE BofAML 유료 데이터. Bloomberg/TradingView에서 확인 권장.</p>
+      </div>
+
+      {/* Fed SOMA T-Bill Detection */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-2">🏦 Fed SOMA T-Bill 집중 매입 감지</h3>
+        <p className="text-slate-400 text-sm mb-4">
+          Fed가 단기물(T-Bills)을 대규모로 매입하면 재무부의 단기 조달을 간접 지원하는 신호.
+          SOMA 내 T-Bills 비중 급증은 &apos;스텔스 QE&apos;의 초기 징후.
+        </p>
+
+        {!apiKey ? (
+          <div className="bg-slate-900 border border-slate-700 rounded p-4 text-center text-slate-500 text-sm">
+            API 키를 설정하면 SOMA 데이터가 표시됩니다
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-2 px-3 text-slate-400">날짜</th>
+                    <th className="text-right py-2 px-3 text-slate-400">T-Bills ($B)</th>
+                    <th className="text-right py-2 px-3 text-slate-400">총 국채 ($B)</th>
+                    <th className="text-right py-2 px-3 text-slate-400">T-Bills 비중</th>
+                    <th className="text-left py-2 px-3 text-slate-400">신호</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(loading[FRED_SERIES.SOMA_TBILLS] || loading[FRED_SERIES.SOMA_TOTAL]) ? (
+                    [...Array(4)].map((_, i) => (
+                      <tr key={i}>
+                        <td colSpan={5} className="py-2 px-3">
+                          <div className="h-5 bg-slate-700 rounded animate-pulse" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : somaRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-slate-500">데이터 없음</td>
+                    </tr>
+                  ) : (
+                    somaRows.slice(-8).map((row, i) => {
+                      const signal = row.pct !== null && row.pct > 20 ? 'danger' : row.pct !== null && row.pct > 15 ? 'warning' : 'safe';
+                      return (
+                        <tr key={i} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-900/30' : ''}`}>
+                          <td className="py-2 px-3 text-slate-300">{row.date}</td>
+                          <td className="py-2 px-3 text-right text-slate-300">
+                            {row.tbills !== null ? `$${(row.tbills / 1000).toFixed(0)}B` : '-'}
+                          </td>
+                          <td className="py-2 px-3 text-right text-slate-300">
+                            {row.total !== null ? `$${(row.total / 1000).toFixed(0)}B` : '-'}
+                          </td>
+                          <td className={`py-2 px-3 text-right font-medium ${
+                            signal === 'danger' ? 'text-red-400' :
+                            signal === 'warning' ? 'text-yellow-400' : 'text-slate-300'
+                          }`}>
+                            {row.pct !== null ? `${row.pct.toFixed(1)}%` : '-'}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className={`text-xs px-2 py-0.5 rounded ${
+                              signal === 'danger' ? 'bg-red-900 text-red-300' :
+                              signal === 'warning' ? 'bg-yellow-900 text-yellow-300' :
+                              'bg-slate-700 text-slate-300'
+                            }`}>
+                              {signal === 'danger' ? '⚠️ 과다' : signal === 'warning' ? '주의' : '정상'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="bg-yellow-950/50 border border-yellow-800 rounded p-3 text-xs">
+              <p className="text-yellow-400 font-bold mb-1">📌 해석 가이드</p>
+              <p className="text-slate-300">T-Bills 비중 15% 이상 → 주의 / 20% 이상 → 스텔스 QE 가능성 높음. Fed가 단기 조달을 간접 지원하는 신호.</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Japan MOF Weekly Flow */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-2">🇯🇵 일본 주간 해외채권 플로우</h3>
+        <p className="text-slate-400 text-sm mb-4">
+          일본 재무성(MOF) 주간 해외증권 매매 동향. 일본은 미국 최대 외국인 국채 보유국 중 하나.
+          대규모 순매도는 미국 국채 수요 위협 신호.
+        </p>
+
+        {japanLoading ? (
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-8 bg-slate-700 rounded animate-pulse" />
+            ))}
+          </div>
+        ) : japanError ? (
+          <div className="bg-red-950/50 border border-red-800 rounded p-3 text-sm text-red-300">
+            ⚠️ 일본 MOF 데이터 로딩 실패: {japanError}
+          </div>
+        ) : japanData.length === 0 ? (
+          <div className="bg-slate-900 border border-slate-700 rounded p-4 text-center text-slate-500 text-sm">
+            데이터를 불러오는 중이거나 사용할 수 없습니다
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left py-2 px-3 text-slate-400">기간</th>
+                    <th className="text-right py-2 px-3 text-slate-400">채권 순매수 (¥억)</th>
+                    <th className="text-right py-2 px-3 text-slate-400">추정 USD ($B)</th>
+                    <th className="text-left py-2 px-3 text-slate-400">신호</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {japanData.slice().reverse().map((row, i) => {
+                    const signal = row.usd < -5 ? 'danger' : row.usd < 0 ? 'warning' : 'safe';
+                    return (
+                      <tr key={i} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-900/30' : ''}`}>
+                        <td className="py-2 px-3 text-slate-300">{row.period}</td>
+                        <td className={`py-2 px-3 text-right font-medium ${row.bonds < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          {row.bonds >= 0 ? '+' : ''}{row.bonds.toFixed(0)}
+                        </td>
+                        <td className={`py-2 px-3 text-right font-medium ${row.usd < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          {row.usd >= 0 ? '+' : ''}{row.usd.toFixed(1)}B
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            signal === 'danger' ? 'bg-red-900 text-red-300' :
+                            signal === 'warning' ? 'bg-yellow-900 text-yellow-300' :
+                            'bg-green-900 text-green-300'
+                          }`}>
+                            {signal === 'danger' ? '⚠️ 매도' : signal === 'warning' ? '소폭 매도' : '매수'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-slate-600 text-xs">
+              * 출처: 일본 재무성 국제금융통계 (fcs_e.csv). 주간 해외증권 매매 동향. USD 환산은 150엔/달러 기준 추정치.
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Institutional Bias Manual */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-4">🏢 기관별 편향 매뉴얼</h3>
+        <div className="space-y-3 text-sm">
+          {[
+            {
+              name: 'IMF',
+              bias: '낙관 편향, 악화 인식 느림',
+              signal: '방어적 언어 = 심각한 우려',
+              color: 'blue',
+            },
+            {
+              name: 'CBO',
+              bias: '기계적, "현 정책 지속" 가정',
+              signal: '시나리오 확장 = 불안 전달',
+              color: 'blue',
+            },
+            {
+              name: 'Federal Reserve',
+              bias: '점진적, 커뮤니케이션 관리, 데이터 의존 위장',
+              signal: '회의록 언어 변화 = 실제 감정 변화',
+              color: 'yellow',
+            },
+            {
+              name: 'Treasury',
+              bias: '시장 안정 집중, 전략적 톤',
+              signal: '바이백 확대 = 유동성 방어 모드 발동',
+              color: 'yellow',
+            },
+            {
+              name: '신용평가사',
+              bias: '후행적, 정치적 민감도 높음',
+              signal: '등급 변경 전 아웃룩(전망) 변화 주시',
+              color: 'red',
+            },
+          ].map((inst, i) => {
+            const colorClass = {
+              blue: 'border-blue-700 bg-blue-950/30',
+              yellow: 'border-yellow-700 bg-yellow-950/30',
+              red: 'border-red-700 bg-red-950/30',
+            }[inst.color];
+            return (
+              <div key={i} className={`border rounded-lg p-3 ${colorClass}`}>
+                <div className="flex items-start gap-3">
+                  <span className="font-bold text-white min-w-24">{inst.name}</span>
+                  <div>
+                    <p className="text-slate-400">{inst.bias}</p>
+                    <p className="text-yellow-400 text-xs mt-1">📡 신호: {inst.signal}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 bg-slate-900 rounded p-3 text-sm">
+          <p className="text-yellow-400 font-bold">🎯 메타 원칙</p>
+          <p className="text-slate-300 mt-1">
+            &ldquo;기관 X는 절대 Y를 말하지 않는데, 지금 Y를 말한다&rdquo; {'>'} &ldquo;기관 X가 Y를 말한다&rdquo;
+          </p>
+        </div>
       </div>
     </div>
   );

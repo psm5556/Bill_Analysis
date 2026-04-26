@@ -6,6 +6,14 @@ export default function DealerPosition() {
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h2 className="text-lg font-bold text-white mb-4">🏦 프라이머리 딜러 포지션</h2>
 
+        <div className="bg-slate-900 border border-slate-700 rounded p-4 mb-5 text-sm">
+          <p className="text-slate-300 mb-2">
+            프라이머리 딜러는 국채 경매의 <strong className="text-white">최후 보루</strong>입니다.
+            딜러가 경매에서 낙찰받은 국채를 시장에 재매각하지 못하면 레버리지가 쌓이고 시스템 위험이 증가합니다.
+          </p>
+          <p className="text-slate-400 text-xs">딜러 낙찰 비중 25% 이상 = 시장 수요 부재 신호</p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
           {[
             { label: '순 국채 포지션', value: '추적 중', desc: '축적 vs 리스크 축소', icon: '📊' },
@@ -29,6 +37,34 @@ export default function DealerPosition() {
           </p>
         </div>
 
+        <div className="overflow-x-auto mb-5">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400">지표</th>
+                <th className="text-left py-2 px-3 text-slate-400">정상</th>
+                <th className="text-left py-2 px-3 text-slate-400">경계</th>
+                <th className="text-left py-2 px-3 text-slate-400">위험</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: '딜러 낙찰 비중', safe: '15% 미만', warn: '15~25%', danger: '25% 초과' },
+                { label: '순 포지션 방향', safe: '감소 (재매각 중)', warn: '유지', danger: '급증 (쌓임)' },
+                { label: '레포 의존도', safe: '안정', warn: '소폭 상승', danger: '급증' },
+                { label: '경매 참여율', safe: '높음', warn: '보통', danger: '저조 (불참)' },
+              ].map((row, i) => (
+                <tr key={i} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-900/30' : ''}`}>
+                  <td className="py-2 px-3 text-slate-200 font-medium">{row.label}</td>
+                  <td className="py-2 px-3 text-green-400 text-xs">{row.safe}</td>
+                  <td className="py-2 px-3 text-yellow-400 text-xs">{row.warn}</td>
+                  <td className="py-2 px-3 text-red-400 text-xs">{row.danger}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
           <h3 className="text-white font-bold mb-3">📡 데이터 출처</h3>
           <p className="text-slate-300 text-sm mb-2">
@@ -38,67 +74,9 @@ export default function DealerPosition() {
           <p className="text-slate-500 text-xs mt-2">
             newyorkfed.org → Markets → Primary Dealer Statistics
           </p>
-        </div>
-      </div>
-
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
-        <h3 className="text-white font-bold mb-4">🏢 기관별 편향 매뉴얼</h3>
-        <div className="space-y-3 text-sm">
-          {[
-            {
-              name: 'IMF',
-              bias: '낙관 편향, 악화 인식 느림',
-              signal: '방어적 언어 = 심각한 우려',
-              color: 'blue',
-            },
-            {
-              name: 'CBO',
-              bias: '기계적, "현 정책 지속" 가정',
-              signal: '시나리오 확장 = 불안 전달',
-              color: 'blue',
-            },
-            {
-              name: 'Federal Reserve',
-              bias: '점진적, 커뮤니케이션 관리, 데이터 의존 위장',
-              signal: '회의록 언어 변화 = 실제 감정 변화',
-              color: 'yellow',
-            },
-            {
-              name: 'Treasury',
-              bias: '시장 안정 집중, 전략적 톤',
-              signal: '바이백 확대 = 유동성 방어 모드 발동',
-              color: 'yellow',
-            },
-            {
-              name: '신용평가사',
-              bias: '후행적, 정치적 민감도 높음',
-              signal: '등급 변경 전 아웃룩(전망) 변화 주시',
-              color: 'red',
-            },
-          ].map((inst, i) => {
-            const colorClass = {
-              blue: 'border-blue-700 bg-blue-950/30',
-              yellow: 'border-yellow-700 bg-yellow-950/30',
-              red: 'border-red-700 bg-red-950/30',
-            }[inst.color];
-            return (
-              <div key={i} className={`border rounded-lg p-3 ${colorClass}`}>
-                <div className="flex items-start gap-3">
-                  <span className="font-bold text-white min-w-24">{inst.name}</span>
-                  <div>
-                    <p className="text-slate-400">{inst.bias}</p>
-                    <p className="text-yellow-400 text-xs mt-1">📡 신호: {inst.signal}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 bg-slate-900 rounded p-3 text-sm">
-          <p className="text-yellow-400 font-bold">🎯 메타 원칙</p>
-          <p className="text-slate-300 mt-1">
-            &ldquo;기관 X는 절대 Y를 말하지 않는데, 지금 Y를 말한다&rdquo; {'>'} &ldquo;기관 X가 Y를 말한다&rdquo;
-          </p>
+          <div className="mt-3 bg-yellow-950/50 border border-yellow-800 rounded p-2 text-xs">
+            <p className="text-yellow-400">⚡ 경매 결과의 딜러 낙찰 비중은 &apos;주간 경매 현황&apos; 탭에서 실시간 확인 가능</p>
+          </div>
         </div>
       </div>
     </div>

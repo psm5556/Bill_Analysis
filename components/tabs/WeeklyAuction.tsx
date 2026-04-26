@@ -84,6 +84,19 @@ function processAuctions(raw: TreasuryAuction[]): ProcessedAuction[] {
     });
 }
 
+function calcSummaryStats(auctions: ProcessedAuction[]) {
+  const recent = auctions.slice(0, 10);
+  if (recent.length === 0) return { avgBtc: null, weakCount: 0, avgIndirect: null, gradeD: 0 };
+  const btcVals = recent.map((a) => a.btc).filter((v): v is number => v !== null);
+  const indirectVals = recent.map((a) => a.indirect).filter((v): v is number => v !== null);
+  return {
+    avgBtc: btcVals.length ? btcVals.reduce((a, b) => a + b, 0) / btcVals.length : null,
+    weakCount: recent.filter((a) => a.btc !== null && a.btc < 2.0).length,
+    avgIndirect: indirectVals.length ? indirectVals.reduce((a, b) => a + b, 0) / indirectVals.length : null,
+    gradeD: recent.filter((a) => a.grade === 'D').length,
+  };
+}
+
 export default function WeeklyAuction() {
   const [auctions, setAuctions] = useState<ProcessedAuction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,8 +126,75 @@ export default function WeeklyAuction() {
     load();
   }, []);
 
+  const stats = calcSummaryStats(auctions);
+
   return (
     <div className="space-y-6">
+      {/* 국채 경매란? */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h2 className="text-lg font-bold text-white mb-3">🏛️ 국채 경매란?</h2>
+        <p className="text-slate-300 text-sm mb-3">
+          미국 재무부는 정부 운영 자금을 마련하기 위해 매주 국채를 경매 방식으로 발행합니다.
+          투자자들이 입찰하면 가장 낮은 금리(높은 가격)를 제시한 순서대로 낙찰받습니다.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div className="bg-slate-900 rounded p-3">
+            <div className="text-blue-400 font-bold mb-1">🏦 누가 참여하나요?</div>
+            <ul className="text-slate-300 space-y-0.5">
+              <li>• <strong className="text-white">프라이머리 딜러</strong>: 의무 입찰 (최후 보루)</li>
+              <li>• <strong className="text-white">간접 낙찰자</strong>: 해외 중앙은행, 기관</li>
+              <li>• <strong className="text-white">직접 낙찰자</strong>: 미국 국내 기관</li>
+            </ul>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <div className="text-yellow-400 font-bold mb-1">📊 경매 결과 해석</div>
+            <ul className="text-slate-300 space-y-0.5">
+              <li>• <strong className="text-white">BtC 높음</strong>: 수요 강함</li>
+              <li>• <strong className="text-white">꼬리(Tail) 작음</strong>: 수요 강함</li>
+              <li>• <strong className="text-white">간접% 높음</strong>: 해외 수요 강함</li>
+            </ul>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <div className="text-red-400 font-bold mb-1">⚠️ 위험 신호</div>
+            <ul className="text-slate-300 space-y-0.5">
+              <li>• BtC 2.0x 미만</li>
+              <li>• 꼬리 3bp 이상</li>
+              <li>• 딜러 낙찰 25% 초과</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Stats Cards */}
+      {!loading && auctions.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className={`border rounded-lg p-4 ${stats.avgBtc !== null && stats.avgBtc < 2.0 ? 'bg-red-950/50 border-red-800' : stats.avgBtc !== null && stats.avgBtc < 2.5 ? 'bg-yellow-950/50 border-yellow-800' : 'bg-green-950/50 border-green-800'}`}>
+            <div className="text-slate-400 text-xs mb-1">최근 10회 평균 BtC</div>
+            <div className={`text-2xl font-bold ${stats.avgBtc !== null && stats.avgBtc < 2.0 ? 'text-red-400' : stats.avgBtc !== null && stats.avgBtc < 2.5 ? 'text-yellow-400' : 'text-green-400'}`}>
+              {stats.avgBtc !== null ? `${stats.avgBtc.toFixed(2)}x` : '-'}
+            </div>
+          </div>
+          <div className={`border rounded-lg p-4 ${stats.weakCount >= 3 ? 'bg-red-950/50 border-red-800' : stats.weakCount >= 1 ? 'bg-yellow-950/50 border-yellow-800' : 'bg-green-950/50 border-green-800'}`}>
+            <div className="text-slate-400 text-xs mb-1">BtC 2.0x 미만 횟수</div>
+            <div className={`text-2xl font-bold ${stats.weakCount >= 3 ? 'text-red-400' : stats.weakCount >= 1 ? 'text-yellow-400' : 'text-green-400'}`}>
+              {stats.weakCount}회
+            </div>
+          </div>
+          <div className={`border rounded-lg p-4 ${stats.avgIndirect !== null && stats.avgIndirect < 60 ? 'bg-red-950/50 border-red-800' : stats.avgIndirect !== null && stats.avgIndirect < 70 ? 'bg-yellow-950/50 border-yellow-800' : 'bg-green-950/50 border-green-800'}`}>
+            <div className="text-slate-400 text-xs mb-1">평균 간접 낙찰</div>
+            <div className={`text-2xl font-bold ${stats.avgIndirect !== null && stats.avgIndirect < 60 ? 'text-red-400' : stats.avgIndirect !== null && stats.avgIndirect < 70 ? 'text-yellow-400' : 'text-green-400'}`}>
+              {stats.avgIndirect !== null ? `${stats.avgIndirect.toFixed(1)}%` : '-'}
+            </div>
+          </div>
+          <div className={`border rounded-lg p-4 ${stats.gradeD >= 2 ? 'bg-red-950/50 border-red-800' : stats.gradeD >= 1 ? 'bg-yellow-950/50 border-yellow-800' : 'bg-slate-900 border-slate-700'}`}>
+            <div className="text-slate-400 text-xs mb-1">D등급 경매 횟수</div>
+            <div className={`text-2xl font-bold ${stats.gradeD >= 2 ? 'text-red-400' : stats.gradeD >= 1 ? 'text-yellow-400' : 'text-slate-300'}`}>
+              {stats.gradeD}회
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white">📊 주간 경매 현황</h2>
@@ -217,20 +297,38 @@ export default function WeeklyAuction() {
       </div>
 
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
-        <h3 className="text-white font-bold mb-3">📏 주요 임계값</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          {[
-            { label: 'Bid-to-Cover', danger: '2.0x 미만', meaning: '수요 침식 신호' },
-            { label: '딜러 보유', danger: '25%+', meaning: '강제 매수 (부정)' },
-            { label: '간접 낙찰자', danger: '60% 미만', meaning: '해외 수요 약화' },
-            { label: '꼬리(Tail)', danger: '3bp+', meaning: '심각한 압박 (bloomberg 확인 필요)' },
-          ].map((t, i) => (
-            <div key={i} className="bg-slate-900 rounded p-3">
-              <div className="text-slate-300 font-medium">{t.label}</div>
-              <div className="text-red-400 text-xs mt-1">⚠️ {t.danger} → {t.meaning}</div>
-            </div>
-          ))}
+        <h3 className="text-white font-bold mb-4">📏 경매 품질 지표 읽는 법</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400">지표</th>
+                <th className="text-left py-2 px-3 text-green-400">🟢 양호</th>
+                <th className="text-left py-2 px-3 text-yellow-400">🟡 주의</th>
+                <th className="text-left py-2 px-3 text-red-400">🔴 위험</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: 'Bid-to-Cover', good: '2.5x 이상', warn: '2.0~2.5x', danger: '2.0x 미만' },
+                { label: '딜러 보유', good: '15% 미만', warn: '15~25%', danger: '25% 초과' },
+                { label: '간접 낙찰자', good: '70% 이상', warn: '60~70%', danger: '60% 미만' },
+                { label: '꼬리(Tail)', good: '0 이하 (Stop Through)', warn: '1~3bp', danger: '3bp+ (Bloomberg 확인 필요)' },
+              ].map((t, i) => (
+                <tr key={i} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-900/30' : ''}`}>
+                  <td className="py-2 px-3 text-slate-200 font-medium">{t.label}</td>
+                  <td className="py-2 px-3 text-green-300 text-xs">{t.good}</td>
+                  <td className="py-2 px-3 text-yellow-300 text-xs">{t.warn}</td>
+                  <td className="py-2 px-3 text-red-300 text-xs">{t.danger}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+        <p className="text-slate-600 text-xs mt-3">
+          * 딜러/간접/직접 % = 각 그룹 낙찰액 / 총 낙찰액으로 계산.
+          꼬리(Tail)는 TreasuryDirect API에서 제공하지 않아 생략.
+        </p>
       </div>
     </div>
   );

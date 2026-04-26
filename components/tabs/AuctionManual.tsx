@@ -152,6 +152,78 @@ export default function AuctionManual() {
         </div>
       </div>
 
+      {/* Comprehensive Checklist Table */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-4">✅ 종합 판단 체크리스트</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400">지표</th>
+                <th className="text-left py-2 px-3 text-green-400">🟢 양호</th>
+                <th className="text-left py-2 px-3 text-yellow-400">🟡 경계</th>
+                <th className="text-left py-2 px-3 text-red-400">🔴 위험</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: 'Bid-to-Cover', good: '2.5x 이상', warn: '2.0~2.5x', danger: '2.0x 미만' },
+                { label: '꼬리(Tail)', good: '0bp 이하 (Stop Through)', warn: '1~3bp', danger: '3bp 이상' },
+                { label: '낙찰금리 vs 쿠폰', good: '낙찰금리 < 쿠폰 (프리미엄)', warn: '±5bp 이내', danger: '낙찰금리 >> 쿠폰 (할인)' },
+                { label: '간접 낙찰자', good: '70% 이상', warn: '60~70%', danger: '60% 미만' },
+                { label: '직접 낙찰자', good: '10~20% (안정)', warn: '20~25%', danger: '25%+ (해외 대체 신호)' },
+                { label: '딜러 보유', good: '15% 미만', warn: '15~25%', danger: '25% 초과 (강제 매수)' },
+                { label: '전월 동일 BtC 비교', good: '개선 (↑)', warn: '보합', danger: '악화 (↓)' },
+              ].map((row, i) => (
+                <tr key={i} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-900/30' : ''}`}>
+                  <td className="py-2 px-3 text-slate-200 font-medium whitespace-nowrap">{row.label}</td>
+                  <td className="py-2 px-3 text-green-300 text-xs">{row.good}</td>
+                  <td className="py-2 px-3 text-yellow-300 text-xs">{row.warn}</td>
+                  <td className="py-2 px-3 text-red-300 text-xs">{row.danger}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 bg-yellow-950/50 border border-yellow-800 rounded p-3 text-xs">
+          <p className="text-yellow-400 font-bold mb-1">📌 종합 판정 가이드</p>
+          <p className="text-slate-300">6~7개 지표 양호 = A등급. 4~5개 = B등급. 2~3개 = C등급. 0~1개 = D등급 (위기 경보).</p>
+        </div>
+      </div>
+
+      {/* Reopening vs New Issue */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-4">🔄 재발행(Reopening) vs 신규발행(New Issue)</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <div className="text-blue-400 font-bold mb-2">신규발행 (New Issue)</div>
+            <ul className="text-slate-300 text-sm space-y-1">
+              <li>• 새로운 CUSIP 번호 발행</li>
+              <li>• 새 쿠폰 금리 설정</li>
+              <li>• 현재 시장 금리 반영</li>
+              <li>• 유동성 낮음 (초기)</li>
+            </ul>
+            <div className="mt-2 text-xs text-slate-500">결과 해석: 낙찰금리 = 시장의 현재 금리 기대치</div>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <div className="text-yellow-400 font-bold mb-2">재발행 (Reopening)</div>
+            <ul className="text-slate-300 text-sm space-y-1">
+              <li>• 기존 CUSIP에 물량 추가</li>
+              <li>• 쿠폰 금리 고정 (기존 채권과 동일)</li>
+              <li>• 할인/프리미엄으로 낙찰</li>
+              <li>• 유동성 높음 (기존 풀에 합류)</li>
+            </ul>
+            <div className="mt-2 text-xs text-slate-500">
+              ⚠️ 꼬리 해석 주의: 쿠폰 vs 시장금리 괴리가 크면 꼬리가 과장될 수 있음
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 bg-blue-950/50 border border-blue-800 rounded p-3 text-xs">
+          <p className="text-blue-400 font-bold mb-1">💡 실용 팁</p>
+          <p className="text-slate-300">재발행 경매에서는 낙찰금리 자체보다 Bid-to-Cover와 간접 낙찰자 비중을 더 중요하게 봐야 합니다. 쿠폰 고정으로 인해 낙찰금리 해석이 왜곡될 수 있습니다.</p>
+        </div>
+      </div>
+
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h3 className="text-white font-bold mb-4">📋 실제 경매 사례: 2026년 4월 9일 30년 재발행</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">

@@ -5,6 +5,73 @@ import BarChart from '@/components/charts/BarChart';
 export default function Check1Issuance() {
   return (
     <div className="space-y-6">
+      {/* Bond Type Cards */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h2 className="text-lg font-bold text-white mb-4">📚 국채 종류 이해하기</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            {
+              name: 'T-Bills (단기채)',
+              period: '4주 ~ 52주',
+              color: 'blue',
+              desc: '할인 발행. 이자 없이 만기 시 액면가 수령. 가장 안전하고 유동성 높음.',
+              risk: '롤오버 위험 — 만기 시 재발행 필요',
+            },
+            {
+              name: 'T-Notes (중기채)',
+              period: '2년, 3년, 5년, 7년, 10년',
+              color: 'green',
+              desc: '반기 이자 지급. 가장 널리 거래되는 국채. 10년물은 글로벌 금리 기준.',
+              risk: '금리 위험 — 금리 상승 시 가격 하락',
+            },
+            {
+              name: 'T-Bonds (장기채)',
+              period: '20년, 30년',
+              color: 'purple',
+              desc: '반기 이자 지급. 가장 긴 만기. 인플레이션 기대에 민감.',
+              risk: '듀레이션 위험 — 금리 민감도 매우 높음',
+            },
+            {
+              name: 'TIPS',
+              period: '5년, 10년, 30년',
+              color: 'yellow',
+              desc: '물가연동. 원금이 CPI에 연동. 실질금리 반영.',
+              risk: '디플레이션 시 원금 보호 제한',
+            },
+            {
+              name: 'FRN (변동금리채)',
+              period: '2년',
+              color: 'orange',
+              desc: '소파금리(SOFR) 연동 변동 이자. 금리 상승 시 이자 증가.',
+              risk: '금리 하락 시 이자 감소',
+            },
+          ].map((bond) => {
+            const colorMap: Record<string, string> = {
+              blue: 'border-blue-700 bg-blue-950/30',
+              green: 'border-green-700 bg-green-950/30',
+              purple: 'border-purple-700 bg-purple-950/30',
+              yellow: 'border-yellow-700 bg-yellow-950/30',
+              orange: 'border-orange-700 bg-orange-950/30',
+            };
+            const labelMap: Record<string, string> = {
+              blue: 'text-blue-400',
+              green: 'text-green-400',
+              purple: 'text-purple-400',
+              yellow: 'text-yellow-400',
+              orange: 'text-orange-400',
+            };
+            return (
+              <div key={bond.name} className={`border rounded-lg p-4 ${colorMap[bond.color]}`}>
+                <div className={`font-bold mb-1 ${labelMap[bond.color]}`}>{bond.name}</div>
+                <div className="text-slate-400 text-xs mb-2">만기: {bond.period}</div>
+                <p className="text-slate-300 text-xs mb-2">{bond.desc}</p>
+                <p className="text-red-400 text-xs">⚠️ {bond.risk}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h2 className="text-lg font-bold text-white mb-2">📐 체크1: 발행 구조 분석</h2>
         <p className="text-slate-400 text-sm mb-4">재무부가 장기 발행을 피하기 위해 단기물 쪽으로 이동 중인지 모니터링합니다.</p>

@@ -12,6 +12,8 @@ interface LiveMetrics {
   vix: number | null;
   sofr: number | null;
   hyOas: number | null;
+  totalDebt: number | null;
+  netInterest: number | null;
 }
 
 function getOnRrpSignal(v: number | null): SignalLevel {
@@ -33,7 +35,7 @@ function getHySignal(v: number | null): SignalLevel {
   return 'safe';
 }
 function calcStressScore(m: LiveMetrics): number {
-  let score = 30; // base
+  let score = 30;
   if (m.onRrp !== null) {
     if (m.onRrp < 100) score += 30;
     else if (m.onRrp < 300) score += 15;
@@ -65,22 +67,30 @@ const BADGE_CLASS: Record<SignalLevel, string> = {
 
 export default function SummaryOpinion() {
   const [metrics, setMetrics] = useState<LiveMetrics>({
-    onRrp: null, onRrpDate: null, rate10y: null, rate30y: null, vix: null, sofr: null, hyOas: null,
+    onRrp: null, onRrpDate: null, rate10y: null, rate30y: null, vix: null, sofr: null, hyOas: null, totalDebt: null, netInterest: null,
   });
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [memo, setMemo] = useState('');
+
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('dashboardMemo') : null;
+    if (saved) setMemo(saved);
+  }, []);
 
   useEffect(() => {
     async function loadMetrics() {
       setLoading(true);
       try {
-        const [onRrpData, rate10yData, rate30yData, vixData, sofrData, hyData] = await Promise.allSettled([
+        const [onRrpData, rate10yData, rate30yData, vixData, sofrData, hyData, debtData, interestData] = await Promise.allSettled([
           fetchFredSeries(FRED_SERIES.ON_RRP, '', 5),
           fetchFredSeries(FRED_SERIES.RATE_10Y, '', 5),
           fetchFredSeries(FRED_SERIES.RATE_30Y, '', 5),
           fetchFredSeries(FRED_SERIES.VIX, '', 5),
           fetchFredSeries(FRED_SERIES.SOFR, '', 5),
           fetchFredSeries(FRED_SERIES.HY_OAS, '', 5),
+          fetchFredSeries(FRED_SERIES.TOTAL_DEBT, '', 5),
+          fetchFredSeries(FRED_SERIES.NET_INTEREST, '', 5),
         ]);
 
         setMetrics({
@@ -91,6 +101,8 @@ export default function SummaryOpinion() {
           vix: vixData.status === 'fulfilled' ? vixData.value.latestValue : null,
           sofr: sofrData.status === 'fulfilled' ? sofrData.value.latestValue : null,
           hyOas: hyData.status === 'fulfilled' ? hyData.value.latestValue : null,
+          totalDebt: debtData.status === 'fulfilled' ? debtData.value.latestValue : null,
+          netInterest: interestData.status === 'fulfilled' ? interestData.value.latestValue : null,
         });
         setLastUpdated(new Date().toLocaleString('ko-KR'));
       } catch { /* silent */ }
@@ -104,15 +116,35 @@ export default function SummaryOpinion() {
   const vixSignal = getVixSignal(metrics.vix);
   const hySignal = getHySignal(metrics.hyOas);
 
-  const stressColor =
-    stressScore >= 70 ? 'text-red-400' :
-    stressScore >= 40 ? 'text-yellow-400' : 'text-green-400';
-  const stressBg =
-    stressScore >= 70 ? 'bg-red-950/50 border-red-800' :
-    stressScore >= 40 ? 'bg-yellow-950/50 border-yellow-800' : 'bg-green-950/50 border-green-800';
+  const stressColor = stressScore >= 70 ? 'text-red-400' : stressScore >= 40 ? 'text-yellow-400' : 'text-green-400';
+  const stressBg = stressScore >= 70 ? 'bg-red-950/50 border-red-800' : stressScore >= 40 ? 'bg-yellow-950/50 border-yellow-800' : 'bg-green-950/50 border-green-800';
+
+  const netInterestGdp = metrics.netInterest !== null
+    ? ((metrics.netInterest / 1000) / 28000 * 100).toFixed(1)
+    : null;
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Intro */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h2 className="text-lg font-bold text-white mb-2">🏛️ 이 대시보드는 무엇인가요?</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="bg-slate-900 rounded p-3">
+            <div className="text-blue-400 font-bold mb-1">📊 목적</div>
+            <p className="text-slate-300">미국 국채 시장의 수요 붕괴 위험을 실시간으로 모니터링. 경매 결과 + 유동성 지표 + 해외 자금 흐름을 통합 분석.</p>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <div className="text-yellow-400 font-bold mb-1">⚠️ 왜 중요한가</div>
+            <p className="text-slate-300">미국 정부는 매년 수조 달러의 국채를 발행해야 합니다. 경매 수요가 무너지면 금리 급등 → 재정 위기 → 글로벌 금융 충격.</p>
+          </div>
+          <div className="bg-slate-900 rounded p-3">
+            <div className="text-green-400 font-bold mb-1">🎯 사용 방법</div>
+            <p className="text-slate-300">매일 10분. 경매 결과 확인 → ON RRP 잔고 변화 → 금리 움직임 → 종합 의견 탭에서 스트레스 점수 확인.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards + Stress Score */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-white">⭐ 오늘의 종합 의견 (초보자용)</h2>
@@ -120,23 +152,37 @@ export default function SummaryOpinion() {
             {loading ? '로딩 중...' : lastUpdated ? `🟢 실시간 | ${lastUpdated}` : '⚪ 데이터 없음'}
           </div>
         </div>
-        <p className="text-slate-400 text-sm mb-4">
-          FRED 실시간 데이터를 종합하여 초보자도 이해할 수 있는 일일 가이드를 제공합니다.
-        </p>
 
-        {/* Live Key Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
-          {/* Stress Score */}
-          <div className={`border rounded-lg p-4 ${stressBg}`}>
-            <div className="text-slate-400 text-xs mb-1">📊 종합 스트레스 점수</div>
+        {/* 4 KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <div className="text-slate-400 text-xs mb-1">🏛️ 총 국채 잔액</div>
             {loading ? (
               <div className="h-8 bg-slate-700 rounded animate-pulse" />
             ) : (
-              <div className={`text-3xl font-bold ${stressColor}`}>{stressScore} <span className="text-base font-normal text-slate-400">/ 100</span></div>
+              <>
+                <div className="text-2xl font-bold text-white">
+                  {metrics.totalDebt !== null ? `$${(metrics.totalDebt / 1000).toFixed(1)}T` : 'N/A'}
+                </div>
+                <div className="text-slate-500 text-xs mt-1">GDP 대비 ~120%</div>
+              </>
             )}
           </div>
 
-          {/* ON RRP */}
+          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <div className="text-slate-400 text-xs mb-1">💸 순이자/GDP</div>
+            {loading ? (
+              <div className="h-8 bg-slate-700 rounded animate-pulse" />
+            ) : (
+              <>
+                <div className={`text-2xl font-bold ${netInterestGdp && parseFloat(netInterestGdp) >= 3.5 ? 'text-red-400' : 'text-white'}`}>
+                  {netInterestGdp ? `${netInterestGdp}%` : 'N/A'}
+                </div>
+                <div className="text-slate-500 text-xs mt-1">위험: 4% 초과</div>
+              </>
+            )}
+          </div>
+
           <div className={`border rounded-lg p-4 ${BADGE_CLASS[onRrpSignal]}`}>
             <div className="text-slate-400 text-xs mb-1">💧 ON RRP 잔고</div>
             {loading ? (
@@ -146,14 +192,37 @@ export default function SummaryOpinion() {
                 <div className={`text-2xl font-bold ${SIGNAL_CLASS[onRrpSignal]}`}>
                   {metrics.onRrp !== null ? `$${metrics.onRrp.toFixed(0)}B` : 'N/A'}
                 </div>
-                <div className="text-slate-500 text-xs mt-1">{metrics.onRrpDate ?? ''} | 위험 $100B</div>
+                <div className="text-slate-500 text-xs mt-1">위험: $100B 미만</div>
               </>
             )}
           </div>
 
-          {/* 10Y Rate */}
+          <div className="bg-red-950/50 border border-red-800 rounded-lg p-4">
+            <div className="text-slate-400 text-xs mb-1">📊 단기채 비중</div>
+            {loading ? (
+              <div className="h-8 bg-slate-700 rounded animate-pulse" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-red-400">22%</div>
+                <div className="text-slate-500 text-xs mt-1">목표: 15~20%</div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Stress Score + other metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+          <div className={`border rounded-lg p-4 ${stressBg}`}>
+            <div className="text-slate-400 text-xs mb-1">📊 종합 스트레스 점수</div>
+            {loading ? (
+              <div className="h-8 bg-slate-700 rounded animate-pulse" />
+            ) : (
+              <div className={`text-3xl font-bold ${stressColor}`}>{stressScore} <span className="text-base font-normal text-slate-400">/ 100</span></div>
+            )}
+          </div>
+
           <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-            <div className="text-slate-400 text-xs mb-1">📈 10Y 국채 금리</div>
+            <div className="text-slate-400 text-xs mb-1">📈 10Y / 30Y 금리</div>
             {loading ? (
               <div className="h-8 bg-slate-700 rounded animate-pulse" />
             ) : (
@@ -166,39 +235,19 @@ export default function SummaryOpinion() {
             )}
           </div>
 
-          {/* VIX */}
           <div className={`border rounded-lg p-4 ${BADGE_CLASS[vixSignal]}`}>
-            <div className="text-slate-400 text-xs mb-1">📉 VIX (주식 변동성)</div>
+            <div className="text-slate-400 text-xs mb-1">📉 VIX / HY OAS</div>
             {loading ? (
               <div className="h-8 bg-slate-700 rounded animate-pulse" />
             ) : (
-              <div className={`text-2xl font-bold ${SIGNAL_CLASS[vixSignal]}`}>
-                {metrics.vix !== null ? metrics.vix.toFixed(1) : 'N/A'}
-              </div>
-            )}
-          </div>
-
-          {/* SOFR */}
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-            <div className="text-slate-400 text-xs mb-1">🏦 SOFR</div>
-            {loading ? (
-              <div className="h-8 bg-slate-700 rounded animate-pulse" />
-            ) : (
-              <div className="text-2xl font-bold text-white">
-                {metrics.sofr !== null ? `${metrics.sofr.toFixed(3)}%` : 'N/A'}
-              </div>
-            )}
-          </div>
-
-          {/* HY OAS */}
-          <div className={`border rounded-lg p-4 ${BADGE_CLASS[hySignal]}`}>
-            <div className="text-slate-400 text-xs mb-1">💳 HY OAS (신용 스프레드)</div>
-            {loading ? (
-              <div className="h-8 bg-slate-700 rounded animate-pulse" />
-            ) : (
-              <div className={`text-2xl font-bold ${SIGNAL_CLASS[hySignal]}`}>
-                {metrics.hyOas !== null ? `${metrics.hyOas.toFixed(0)}bp` : 'N/A'}
-              </div>
+              <>
+                <div className={`text-2xl font-bold ${SIGNAL_CLASS[vixSignal]}`}>
+                  {metrics.vix !== null ? metrics.vix.toFixed(1) : 'N/A'}
+                </div>
+                <div className={`text-xs mt-1 ${SIGNAL_CLASS[hySignal]}`}>
+                  HY: {metrics.hyOas !== null ? `${metrics.hyOas.toFixed(0)}bp` : 'N/A'}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -226,7 +275,7 @@ export default function SummaryOpinion() {
           </ul>
         </div>
 
-        <div className="bg-red-950/50 border border-red-800 rounded-lg p-4 mb-5">
+        <div className="bg-red-950/50 border border-red-800 rounded-lg p-4">
           <h3 className="text-red-400 font-bold mb-3">⚠️ 주의사항</h3>
           <ul className="space-y-1 text-sm text-slate-300">
             <li>• 공식 발표(정부/IMF)는 후행적이며 낙관 편향. 현금이 사라진 후 &quot;돈 풀기&quot; 헤드라인이 나옵니다.</li>
@@ -236,6 +285,42 @@ export default function SummaryOpinion() {
         </div>
       </div>
 
+      {/* 3 Scenarios as TABLE */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-4">🎯 3가지 시나리오</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left py-2 px-3 text-slate-400 w-1/4">항목</th>
+                <th className="text-left py-2 px-3 text-green-400">🟢 강세 (Bull)</th>
+                <th className="text-left py-2 px-3 text-yellow-400">🟡 기본 (Base)</th>
+                <th className="text-left py-2 px-3 text-red-400">🔴 약세 (Bear)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: '핵심 내러티브', bull: 'TGA 방출 + 바이백 유동성 파티', base: '구조적 약세 출현. 한 자릿수 변동성 확장', bear: '신용 악화. 민간 부문 소진 → 등급 강등 가능' },
+                { label: 'Bid-to-Cover', bull: '2.5x 이상', base: '2.0~2.5x', bear: '2.0x 미만 (D등급)' },
+                { label: 'ON RRP', bull: '안정 / 상승', base: '완만한 감소', bear: '$100B 이하 위험' },
+                { label: '10Y 금리', bull: '4.2% 이하', base: '4.2~5.0%', bear: '5.0% 초과 + 상승 지속' },
+                { label: 'MOVE 지수', bull: '80 이하', base: '100~120', bear: '120+ (위기 모드)' },
+                { label: '딜러 보유', bull: '15% 미만', base: '15~25%', bear: '25%+ (강제 매수)' },
+                { label: 'CCB 기준 (EUR/USD)', bull: '안정 / 달러 약세', base: '보합', bear: 'CCB 대폭 음(-). 달러 부족' },
+              ].map((row, i) => (
+                <tr key={i} className={`border-b border-slate-800 ${i % 2 === 0 ? 'bg-slate-900/30' : ''}`}>
+                  <td className="py-2 px-3 text-slate-300 font-medium">{row.label}</td>
+                  <td className="py-2 px-3 text-green-300 text-xs">{row.bull}</td>
+                  <td className="py-2 px-3 text-yellow-300 text-xs">{row.base}</td>
+                  <td className="py-2 px-3 text-red-300 text-xs">{row.bear}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Weekly Watchlist */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h3 className="text-white font-bold mb-4">📅 주간 주목 목록</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
@@ -254,48 +339,7 @@ export default function SummaryOpinion() {
         </div>
       </div>
 
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
-        <h3 className="text-white font-bold mb-4">🎯 3가지 시나리오</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-green-950/50 border border-green-800 rounded-lg p-4">
-            <div className="text-green-400 font-bold mb-2">🟢 강세 (Bull Case)</div>
-            <p className="text-slate-300 text-sm mb-3">단기 공급 압박. TGA 방출 + 바이백 유동성 파티 기대.</p>
-            <div className="text-xs text-slate-400">
-              <p className="font-medium text-slate-300 mb-1">확인 신호:</p>
-              <ul className="space-y-1">
-                <li>• ON RRP 안정</li>
-                <li>• B+ 등급 이상 경매</li>
-                <li>• 10Y 4.2% 이하</li>
-              </ul>
-            </div>
-          </div>
-          <div className="bg-yellow-950/50 border border-yellow-800 rounded-lg p-4">
-            <div className="text-yellow-400 font-bold mb-2">🟡 기본 (Base Case)</div>
-            <p className="text-slate-300 text-sm mb-3">구조적 약세 출현. 한 자릿수 변동성 확장.</p>
-            <div className="text-xs text-slate-400">
-              <p className="font-medium text-slate-300 mb-1">확인 신호:</p>
-              <ul className="space-y-1">
-                <li>• Bid-to-Cover 2.0~2.5x</li>
-                <li>• 꼬리 1~3bp</li>
-                <li>• MOVE 100~120</li>
-              </ul>
-            </div>
-          </div>
-          <div className="bg-red-950/50 border border-red-800 rounded-lg p-4">
-            <div className="text-red-400 font-bold mb-2">🔴 약세 (Bear Case)</div>
-            <p className="text-slate-300 text-sm mb-3">신용 악화. 민간 부문 소진 → 신용등급 강등 가능.</p>
-            <div className="text-xs text-slate-400">
-              <p className="font-medium text-slate-300 mb-1">확인 신호:</p>
-              <ul className="space-y-1">
-                <li>• D 등급 경매</li>
-                <li>• 딜러 보유 25%+</li>
-                <li>• CCB 대폭 음(-)</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* Daily 10-min Checklist */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h3 className="text-white font-bold mb-4">⏰ 일일 10분 체크리스트</h3>
         <div className="space-y-3">
@@ -320,6 +364,44 @@ export default function SummaryOpinion() {
         </div>
       </div>
 
+      {/* Beginner Action Guide */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-4">🚦 초보자 액션 가이드</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="bg-green-950/50 border border-green-800 rounded p-4">
+            <div className="text-green-400 font-bold mb-2">🟢 안전 구간</div>
+            <ul className="text-slate-300 space-y-1 text-xs">
+              <li>• BtC 2.5x 이상</li>
+              <li>• ON RRP $300B 이상</li>
+              <li>• 10Y 4.2% 이하</li>
+              <li>• VIX 20 이하</li>
+            </ul>
+            <p className="text-green-400 text-xs mt-2 font-medium">→ 정기 모니터링 유지</p>
+          </div>
+          <div className="bg-yellow-950/50 border border-yellow-800 rounded p-4">
+            <div className="text-yellow-400 font-bold mb-2">🟡 주의 구간</div>
+            <ul className="text-slate-300 space-y-1 text-xs">
+              <li>• BtC 2.0~2.5x</li>
+              <li>• ON RRP $100~300B</li>
+              <li>• 10Y 4.2~5.0%</li>
+              <li>• VIX 20~30</li>
+            </ul>
+            <p className="text-yellow-400 text-xs mt-2 font-medium">→ 3개 이상 동시 확인 후 판단</p>
+          </div>
+          <div className="bg-red-950/50 border border-red-800 rounded p-4">
+            <div className="text-red-400 font-bold mb-2">🔴 위험 구간</div>
+            <ul className="text-slate-300 space-y-1 text-xs">
+              <li>• BtC 2.0x 미만</li>
+              <li>• ON RRP $100B 미만</li>
+              <li>• 10Y 5.0% 초과 + 상승</li>
+              <li>• VIX 30 초과</li>
+            </ul>
+            <p className="text-red-400 text-xs mt-2 font-medium">→ 전문가 조언 필수. 단독 판단 금지</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Expert Habits */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
         <h3 className="text-white font-bold mb-4">🧠 7가지 전문가 사고 습관</h3>
         <div className="space-y-2 text-sm">
@@ -338,6 +420,21 @@ export default function SummaryOpinion() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Memo */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <h3 className="text-white font-bold mb-3">📝 나의 분석 메모</h3>
+        <textarea
+          value={memo}
+          onChange={(e) => {
+            setMemo(e.target.value);
+            localStorage.setItem('dashboardMemo', e.target.value);
+          }}
+          placeholder="오늘의 관찰 사항, 경매 결과, 의견을 자유롭게 기록하세요..."
+          className="w-full h-32 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+        />
+        <p className="text-slate-600 text-xs mt-1">* 메모는 브라우저 로컬에 저장됩니다. 서버로 전송되지 않습니다.</p>
       </div>
 
       <p className="text-slate-600 text-xs text-center">

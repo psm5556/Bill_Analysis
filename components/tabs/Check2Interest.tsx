@@ -29,6 +29,36 @@ export default function Check2Interest() {
           </div>
         </div>
 
+        {/* Spending Comparison */}
+        <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 mb-5">
+          <h3 className="text-white font-bold mb-3">🔴 2025년 순 이자 vs 주요 지출 비교 ($B)</h3>
+          <div className="space-y-2">
+            {[
+              { label: '순 이자 비용', value: 952, pct: 100, color: 'bg-red-500' },
+              { label: '국방비', value: 886, pct: 93, color: 'bg-orange-500' },
+              { label: '메디케어', value: 874, pct: 92, color: 'bg-yellow-500' },
+              { label: '메디케이드', value: 618, pct: 65, color: 'bg-blue-500' },
+              { label: '사회보장 (노령)', value: 1350, pct: 100, color: 'bg-green-500' },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300">{item.label}</span>
+                  <span className="text-slate-400">${item.value}B</span>
+                </div>
+                <div className="h-4 bg-slate-800 rounded overflow-hidden">
+                  <div
+                    className={`h-full ${item.color} rounded`}
+                    style={{ width: `${Math.min(item.value / 1400 * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-slate-500 text-xs mt-3">
+            * 사회보장은 전체 지출($1.35T) 기준. 이자 비용이 국방비와 메디케어를 초과하는 역사적 상황.
+          </p>
+        </div>
+
         <div className="bg-slate-900 border border-slate-700 rounded-lg p-4 mb-5">
           <h3 className="text-white font-bold mb-3">📈 CBO 10년 전망 ($B)</h3>
           <BarChart

@@ -28,6 +28,8 @@ export const FRED_SERIES = {
   EURUSD: 'DEXUSEU',
   TOTAL_DEBT: 'GFDEBTN',
   NET_INTEREST: 'FYOINT',
+  SOMA_TBILLS: 'WSHOMCB',
+  SOMA_TOTAL: 'TREAST',
 } as const;
 
 export const FRED_BASE_URL = 'https://api.stlouisfed.org/fred/series/observations';
